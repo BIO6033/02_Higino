@@ -1,0 +1,171 @@
+---
+title: "02_Higino"
+author: "Gracielle Higino"
+date: "2019-10-16"
+# knit: (function(inputFile, encoding) {
+#       out_dir <- 'manuscript';
+#       rmarkdown::render(inputFile,
+#                         encoding = encoding,
+#                         output_file = file.path(dirname(inputFile),
+#                         out_dir,
+#                         'manuscript.docx')) })
+output:
+  html_document:
+    toc: true
+    toc_depth: 2
+    toc_float: true
+      # word_document:
+  #   reference_docx: manuscript/sources/template.docx
+csl: manuscript/sources/ecology-letters.csl
+bibliography:
+- manuscript/sources/library.bib
+- manuscript/sources/installed-r-packages.bib
+---
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# http://stackoverflow.com/questions/28894515/rmarkdown-directing-output-file-into-a-directory
+out_dir <- 'manuscript'
+if(!file.exists(out_dir)) {
+  dir.create(out_dir)
+}
+```
+
+
+
+```{r r_packages, include = FALSE}
+# ipak function: install and load multiple R packages.
+# Check to see if packages are installed.
+# Install them if they are not, then load them into the R session.
+# https://gist.github.com/stevenworthington/3178163
+
+ipak <- function(pkg){
+    new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
+    if (length(new.pkg))
+    {
+      install.packages(new.pkg,
+                       dependencies = TRUE,
+                       repos = "https://cloud.r-project.org")
+    }
+    suppressPackageStartupMessages(sapply(pkg, require, character.only = TRUE))
+}
+
+ipak(packages_list <- c(
+                       "devtools",  # required; do not exclude from this list
+                       "bibtex",    # required; do not exclude from this list
+                       "knitr",     # required; do not exclude from this list
+                       "rmarkdown", # required; do not exclude from this list
+                       "pacman",    # required; do not exclude from this list
+                       "captioner", # required; do not exclude from this list
+                       "git2r",     # required; do not exclude from this list
+                       "ggplot2",
+                       "dplyr",
+                       "tidyr",
+                       "readr")
+     )
+
+pacman::p_load_gh(char = c(
+                           # required; do not exclude from this list
+                           "benmarwick/wordcountaddin",
+                           # required; do not exclude from this list
+                           "ropensci/rcrossref"
+                           ),
+                  install = TRUE,
+                  dependencies = TRUE)
+
+write.bib(packages_list, "manuscript/sources/installed-r-packages.bib")
+
+fig <- captioner(prefix ="Figure")
+tab <- captioner(prefix="Table")
+```
+
+# Loading the data:
+```{r, warnings=FALSE, results='hide', cache.comments=FALSE}
+emperors <- readr::read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-08-13/emperors.csv")
+```
+
+# Who kills emperors usually?
+```{r}
+ggplot(data = emperors, aes(x=killer)) +
+  geom_bar(stat="count") +
+  theme(axis.text.x = element_text(angle = 90))
+```
+
+
+# Arhama: Is there a relation between the emperor rise and who kills him?
+
+```{r}
+E = emperors %>%
+       select(name,rise,killer)%>%
+          arrange (name)
+E
+ggplot(E, aes(x=killer)) +
+  geom_point(stat="count") + theme_dark() +theme(axis.text.x = element_text(angle = 90))+
+  facet_wrap(~rise)
+```
+
+
+# Are causes of killing related to where do you were born?
+
+```{r}
+ggplot(emperors, aes(x=killer)) +
+  geom_bar(stat="count") +
+  theme(axis.text.x = element_text(angle = 90)) +
+  facet_wrap(~birth_prv)
+```
+
+Well, we can tell that if you were an Emperor born in Italy and your power was given to you as a right at your birth, you are very much in trouble. Anything can kill you, so you better sleep with an eye open.
+
+However, if you were born, say, in Pannonia Inferior and was elected, or even bought your position, you are pretty much safe.
+
+Can we predict what will happen with the next ancient roman emperors that will never born because, well, then they wouldn't be ancient?
+
+
+
+# R packages
+
+```{r eval = TRUE, echo = FALSE, results='asis'}
+cite_pkg <- function(pkg_list) {
+
+  packages <- sort(pkg_list)
+  cites <- lapply(packages, utils::citation)
+  cites.bib <- lapply(cites, utils::toBibtex)
+
+  # generate reference key
+  for (i in seq_len(length(cites.bib))) {
+    cites.bib[[i]] <-
+      sub(
+        pattern = "\\{,$",
+        replacement = paste0("{", packages[i], ","),
+        x = cites.bib[[i]]
+      )
+  }
+
+  # write bibtex references to file
+  writeLines(enc2utf8(unlist(cites.bib)), con = "manuscript/sources/pkg-refs.bib", useBytes = TRUE)
+
+  # return named list of bibtex references
+  names(cites.bib) <- packages # pkgs
+
+  writeLines(paste("- ", names(cites.bib), " [@", names(cites.bib), "]", sep = ""))
+}
+
+
+cite_pkg(packages_list)
+```
+
+
+
+# References
+
+<!-- https://stackoverflow.com/a/44294306/5974372 -->
+
+<div id="refs"></div>
+
+
+
+```{r session-info}
+sessionInfo()
+```
