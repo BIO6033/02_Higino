@@ -12,7 +12,7 @@ date: "2019-10-16"
 output:
   html_document:
     toc: true
-    toc_depth: 2
+    toc_depth: 3
     toc_float: true
       # word_document:
   #   reference_docx: manuscript/sources/template.docx
@@ -23,7 +23,6 @@ bibliography:
 ---
 
 
-
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 # http://stackoverflow.com/questions/28894515/rmarkdown-directing-output-file-into-a-directory
@@ -32,7 +31,6 @@ if(!file.exists(out_dir)) {
   dir.create(out_dir)
 }
 ```
-
 
 
 ```{r r_packages, include = FALSE}
@@ -61,9 +59,9 @@ ipak(packages_list <- c(
                        "captioner", # required; do not exclude from this list
                        "git2r",     # required; do not exclude from this list
                        "ggplot2",
-                       "dplyr",
-                       "tidyr",
-                       "readr")
+                       "caret",
+                       "tidyverse"
+                    )
      )
 
 pacman::p_load_gh(char = c(
@@ -81,48 +79,111 @@ fig <- captioner(prefix ="Figure")
 tab <- captioner(prefix="Table")
 ```
 
-# Loading the data:
-```{r, warnings=FALSE, results='hide', cache.comments=FALSE}
-emperors <- readr::read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-08-13/emperors.csv")
+Let's try k-NN classification with cancer data.
+
+# Data download and inspection :mag_right:
+
+## Get data
+
+```{r message=FALSE}
+poches <- as.data.frame(read_csv("https://raw.githubusercontent.com/the-pudding/data/master/pockets/measurements.csv"))
 ```
 
-# Who kills emperors usually?
+## Explore data
 ```{r}
-ggplot(data = emperors, aes(x=killer)) +
-  geom_bar(stat="count") +
-  theme(axis.text.x = element_text(angle = 90))
+row.names(poches) <- paste(poches$menWomen, row.names(poches), sep="_") 
+#poches$menWomen <- NULL
+
+poches_pca <- prcomp(poches[,6:15], scale = TRUE)
+
+poches_pca.df <- as.data.frame(poches_pca$x)
+poches_pca.df$group <- sapply(strsplit(as.character(row.names(poches)), "_"), "[[", 1 )
+head(poches_pca.df)
+p<-ggplot(poches_pca.df,aes(x=PC1,y=PC2,color=group))
+p<-p+geom_point()
+p
 ```
 
 
-# Arhama: Is there a relation between the emperor rise and who kills him?
+Looks like we have some structure on our data. Let's create a new variable: pockets' area.
+```{r message=FALSE}
+poches$area <- poches$maxHeightFront * poches$maxWidthFront
+```
+
+## Gotta summarize!
+```{r}
+# summary of dataset
+num_obs <- nrow(poches)
+poches %>% 
+  group_by(poches$group <- sapply(strsplit(as.character(row.names(poches)), "_"), "[[", 1 )) %>% 
+  summarize(n = n(),
+            percentage = n() / num_obs * 100)
+```
+
+## And standardize!
+```{r}
+# standardize
+scale2 <- function(x, na.rm = FALSE) (x - mean(x, na.rm = na.rm)) / sd(x, na.rm)
+poches_stand <- poches %>% 
+  mutate_if(is.double, scale2)
+
+poches_stand %>% glimpse
+```
 
 ```{r}
-E = emperors %>%
-       select(name,rise,killer)%>%
-          arrange (name)
-E
-ggplot(E, aes(x=killer)) +
-  geom_point(stat="count") + theme_dark() +theme(axis.text.x = element_text(angle = 90))+
-  facet_wrap(~rise)
+poches_stand %>%
+  ggplot(aes(x = area, y = price, color = menWomen)) +
+  geom_point()
 ```
 
-
-# Are causes of killing related to where do you were born?
 
 ```{r}
-ggplot(emperors, aes(x=killer)) +
-  geom_bar(stat="count") +
-  theme(axis.text.x = element_text(angle = 90)) +
-  facet_wrap(~birth_prv)
+# format data for analysis ------------------------------------------------
+
+poches_train <- poches_stand %>%
+  select("area", "price") 
+
+poches_labels <- poches$menWomen
 ```
 
-Well, we can tell that if you were an Emperor born in Italy and your power was given to you as a right at your birth, you are very much in trouble. Anything can kill you, so you better sleep with an eye open.
+# Training the model
+<img src="https://i.pinimg.com/736x/e0/7c/97/e07c977954aa2a4f9c1ea89ad61b71ce.jpg"
+     alt="Model being trained"
+     style="align: center; margin-right: 10px;" />
 
-However, if you were born, say, in Pannonia Inferior and was elected, or even bought your position, you are pretty much safe.
+```{r}
+k <- data.frame(k = 5)
+model_knn <- train(x = data.frame(poches_train),
+                   y = poches_labels,
+                   method='knn',
+                   tuneGrid = k)
+```
 
-Can we predict what will happen with the next ancient roman emperors that will never born because, well, then they wouldn't be ancient?
+## Testing!
+If I get a pair of pants with the area of the front pocket = 325 and the price = 25.87, would it be a men's or women's pants?
+```{r}
+new_obs <- data.frame(area = 325, price = 25.87)
+predict(object = model_knn, newdata = new_obs)
+```
 
+# visualizing model spread to the data ------------------------------------
+```{r}
+new_area <- seq(from = min(poches_train$area), to = max(poches_train$area), length.out = 200)
+new_price <- seq(from = min(poches_train$price), to = max(poches_train$price), length.out = 200)
 
+grid_data <- expand_grid(area = new_area,
+                         price = new_price)
+
+grid_data$menWomen <- predict(object = model_knn, newdata = as.data.frame(grid_data))
+
+poches_stand %>%
+  ggplot(aes(x = area, y = price, color = menWomen, fill = menWomen)) +
+  geom_point(data = grid_data, alpha = 0.3) +
+  geom_point(alpha = 0.7, pch = 21, color = "black") +
+  scale_color_brewer(type = "qual") +
+  scale_fill_brewer(type = "qual")
+
+```
 
 # R packages
 
