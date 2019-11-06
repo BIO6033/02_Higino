@@ -115,7 +115,8 @@ poches$area <- poches$maxHeightFront * poches$maxWidthFront
 # summary of dataset
 num_obs <- nrow(poches)
 poches %>% 
-  group_by(poches$group <- sapply(strsplit(as.character(row.names(poches)), "_"), "[[", 1 )) %>% 
+  group_by(poches$group <- sapply(strsplit(as.character(row.names(poches)), "_"), "[[", 1 )) %>%
+  #group_by(poches$menWomen) %>% 
   summarize(n = n(),
             percentage = n() / num_obs * 100)
 ```
